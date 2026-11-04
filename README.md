@@ -1,97 +1,151 @@
-# Equipo 5 — BBP y DistBBP en Hadoop 3.3.6
+# Equipo 5 | BBP y DistBBP con Hadoop 3.3.6
 
-**Materia:** Manejo Masivo de Datos · **Profesor:** Javier Moya · **Tema:** Cálculo de π mediante BBP.
+**Materia:** Manejo Masivo de Datos  
+**Profesor:** Javier Moya  
+**Tema:** Ejemplos MapReduce para el cálculo de π
 
-## Objetivo
-Ejecutar y explicar `bbp` y `distbbp` del JAR oficial de ejemplos de Hadoop 3.3.6 y permitir reproducir la práctica desde otro contenedor Debian con Hadoop configurado.
+## 1. Objetivo
 
-## Requisitos
-- Windows con Docker Desktop, PowerShell y Git; contenedor existente llamado `hadoop` con Hadoop 3.3.6 y Java.
-- No ejecutar `docker rm hadoop`.
-- El script usa el **modo local** de Hadoop (`-D mapreduce.framework.name=local` y `-fs file:///`), por lo que no exige iniciar HDFS/YARN.
-- En este ejercicio **no hay archivos de entrada externos**: BBP y DistBBP generan sus propias particiones matemáticas. `datos/` contiene una explicación.
+Ejecutar los ejemplos `bbp` y `distbbp` incluidos en Hadoop 3.3.6, identificar sus parámetros y explicar cómo se organiza el cálculo mediante tareas MapReduce. El repositorio incluye instrucciones, un script de ejecución, resultados de referencia y un ejercicio de comparación.
 
-## 1. Preparar el contenedor
-**[EN TU COMPUTADORA — PowerShell]**
+## 2. Entorno de trabajo
+
+La práctica se realizó con Docker Desktop en Windows y un contenedor Debian denominado `hadoop`, con Java y Hadoop 3.3.6 instalados en `/opt/hadoop`.
+
+**Requisitos para reproducirla:**
+- Docker Desktop en funcionamiento y acceso a PowerShell.
+- Un contenedor Debian existente llamado `hadoop` con Java y Hadoop 3.3.6 configurados.
+- El archivo `/opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar`.
+
+Los comandos del repositorio usan el sistema de archivos local y no requieren un clúster de varios nodos. La instalación inicial de Hadoop no está automatizada en este proyecto.
+
+## 3. Descargar el proyecto
+
+En **PowerShell**:
+
 ```powershell
+git clone https://github.com/frankofdz2/bda-equipo-5-bbp.git
+cd bda-equipo-5-bbp
 docker ps -a
-docker start hadoop  # solo si estaba detenido
-docker exec -it hadoop bash
 ```
-**[DENTRO DEL CONTENEDOR — bash]**
-```bash
-export HADOOP_HOME=/opt/hadoop
-export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
-export PATH="$JAVA_HOME/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PATH"
-hadoop version
-ls -lh "$HADOOP_HOME/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar"
-```
-Si Java no existe, hay que reparar la instalación antes de continuar; no adivines `JAVA_HOME`.
 
-## 2. Transferir el script
-**[EN TU COMPUTADORA — PowerShell]** desde la carpeta del repositorio:
+Si el contenedor `hadoop` está detenido:
+
+```powershell
+docker start hadoop
+```
+
+Verificar la instalación:
+
+```powershell
+docker exec hadoop bash -lc 'java -version && /opt/hadoop/bin/hadoop version'
+```
+
+## 4. Ejecutar los ejemplos
+
+Desde la carpeta del repositorio, en **PowerShell**:
+
 ```powershell
 docker cp .\scripts\ejecutar.sh hadoop:/tmp/ejecutar-equipo5.sh
 docker exec -it hadoop bash
 ```
-**[DENTRO DEL CONTENEDOR — bash]**
+
+Dentro del **contenedor Debian**:
+
 ```bash
+sed -i 's/\r$//' /tmp/ejecutar-equipo5.sh
 bash /tmp/ejecutar-equipo5.sh
 ```
-El script crea un directorio de ejecución único bajo `/tmp/equipo5/ejecuciones/` y muestra la ruta final. No borra resultados previos. Para una demostración manual, ver sección 3.
 
-## 3. Ejecución manual
-**[DENTRO DEL CONTENEDOR — bash]** (primero configurar entorno según sección 1):
+El script guarda cada ejecución en una carpeta independiente bajo `/tmp/equipo5/ejecuciones/`. Allí se generan los resultados y los registros `bbp.log` y `distbbp.log`. No elimina ejecuciones anteriores.
+
+**Nota técnica:** el script invoca los ejemplos con sus argumentos propios. El modo de ejecución depende de la configuración de Hadoop del contenedor; antes de describirlo como modo local debe comprobarse la configuración efectiva con `hadoop getconf` y los registros.
+
+## 5. Comandos manuales
+
+Dentro del contenedor:
+
 ```bash
-JAR=/opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar
-BASE=/tmp/equipo5/manual-$(date +%Y%m%d-%H%M%S)
+export HADOOP_HOME=/opt/hadoop
+export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
+export PATH="$JAVA_HOME/bin:$HADOOP_HOME/bin:$PATH"
+
+JAR="$HADOOP_HOME/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar"
+BASE="/tmp/equipo5/manual-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BASE"
-hadoop jar "$JAR" bbp -D mapreduce.framework.name=local -fs file:/// 1 16 2 "$BASE/bbp"
+
+hadoop jar "$JAR" bbp 1 16 2 "$BASE/bbp"
 cat "$BASE/bbp/pi.txt"
-hadoop jar "$JAR" distbbp -D mapreduce.framework.name=local -fs file:/// 100 1 1 m 1 "$BASE/distbbp-remoto" "$BASE/distbbp-local"
-find "$BASE/distbbp-local" -maxdepth 1 -type f -name '*.txt' | sort
-cat "$BASE/distbbp-local"/*.txt
+
+hadoop jar "$JAR" distbbp 100 1 1 m 1 "$BASE/distbbp-remoto" "$BASE/distbbp-local"
+find "$BASE/distbbp-local" -maxdepth 1 -type f -name '*.txt' -print | sort
 ```
-**Nota:** Hadoop acepta las opciones genéricas antes de los argumentos propios del ejemplo. `distbbp` lanza múltiples sumas internas aun con `nJobs=1`.
 
-## 4. Interpretación
-- **BBP:** `startDigit=1`, `nDigits=16`, `nMaps=2`, `workingDir=...`. Produce texto y archivo hexadecimal de π. El cálculo conocido comienza `0x3.243F6A8885A308D3`.
-- **DistBBP:** `b=100` salta 100 bits; `nThreads=1`, `nJobs=1` por suma, `type=m` (trabajo por el lado Map), `nPart=1`, más directorios remoto/local. Sus archivos `P8_*` y `P20_*` son **resultados parciales**, no una cadena de dígitos final por sí solos.
-- **Map:** calcula fragmentos o sumas independientes; **shuffle/agrupación:** organiza las contribuciones; **Reduce:** combina fragmentos en BBP. En DistBBP `type=m`, el trabajo es del lado Map; no debe afirmarse que cada trabajo utiliza Reduce.
-- En modo local hay ejecución de MapReduce en un único equipo, **no** un clúster distribuido real.
+### Parámetros
 
-## 5. Evidencias disponibles y pendientes
-En la sesión original, BBP terminó con `map 100% reduce 100%`, `completed successfully`, duración `1.583 seconds`; `pi.txt` mostró `Pi = 0x3.243F6A8885 A308D3` y `Pi = 3.1415926535 897932`. DistBBP produjo ocho archivos `P8_*`/`P20_*` de sumas parciales. **No se ha conservado en este repositorio la salida completa de terminación de DistBBP ni su valor combinado final.** Los archivos de `resultados/` son registros de texto basados en las salidas proporcionadas; no son capturas ni salidas binarias extraídas del contenedor.
+| Ejemplo | Argumentos utilizados | Significado |
+| --- | --- | --- |
+| BBP | `1 16 2 directorio` | Posición inicial, cantidad de dígitos hexadecimales, número de tareas Map y directorio de trabajo |
+| DistBBP | `100 1 1 m 1 remoto local` | Posición en bits, número de hilos, trabajos, tipo de ejecución Map, particiones y directorios de salida |
 
-## 6. Copiar resultados reales al repositorio
-**[EN TU COMPUTADORA — PowerShell]**, después de ejecutar el script, sustituir `<ID_EJECUCION>` por el nombre impreso:
+BBP calcula dígitos de π mediante la fórmula Bailey–Borwein–Plouffe. DistBBP organiza sumas parciales relacionadas con ese cálculo y trabaja con posiciones expresadas en bits.
+
+## 6. Resultados y evidencias
+
+### BBP
+
+En `resultados/bbp/pi.txt` se conserva esta salida:
+
+```text
+Pi = 0x3.243F6A8885 A308D3
+Total number of hexadecimal digits is 16.
+
+Pi = 3.1415926535 897932
+Total number of decimal digits is 16.
+```
+
+El resultado corresponde a los primeros 16 dígitos hexadecimales solicitados. En la ejecución registrada se observó que BBP terminó correctamente.
+
+### DistBBP
+
+Las carpetas `resultados/distbbp/` y `resultados/distbbp-remoto/` contienen archivos de sumas parciales `P8_*` y `P20_*`. Esos archivos sirven para inspeccionar trabajo intermedio, pero **no demuestran por sí solos que el cálculo global haya terminado**. Para comprobarlo hay que revisar el registro completo `distbbp.log` de una nueva ejecución.
+
+Los resultados del repositorio son material de referencia; para una entrega definitiva es conveniente contrastarlos con los archivos originales copiados del contenedor.
+
+## 7. Relación con MapReduce
+
+**Map:** distribuye partes del cálculo que pueden resolverse de manera independiente.  
+**Shuffle y agrupación:** cuando un trabajo incluye Reduce, organiza las contribuciones intermedias.  
+**Reduce:** combina las contribuciones que correspondan al algoritmo y la configuración utilizada.
+
+No todos los trabajos tienen una fase Reduce. En particular, la opción `m` utilizada en DistBBP corresponde al trabajo por el lado Map. Además, ejecutar MapReduce en un solo contenedor no equivale a demostrar un clúster distribuido de varios equipos.
+
+## 8. Guardar los resultados de una nueva ejecución
+
+Dentro de Debian, identificar la carpeta reciente:
+
+```bash
+ls -lt /tmp/equipo5/ejecuciones/
+```
+
+Salir con `exit`. Después, desde PowerShell, sustituir `ID_EJECUCION` por el nombre de la carpeta creada:
+
 ```powershell
-docker cp hadoop:/tmp/equipo5/ejecuciones/<ID_EJECUCION>/bbp/pi.txt .\resultados\pi.txt
-docker cp hadoop:/tmp/equipo5/ejecuciones/<ID_EJECUCION>/distbbp-local .\resultados\distbbp-local
+docker cp hadoop:/tmp/equipo5/ejecuciones/ID_EJECUCION/bbp/pi.txt .\resultados\bbp\pi.txt
+docker cp hadoop:/tmp/equipo5/ejecuciones/ID_EJECUCION/distbbp.log .\resultados\distbbp-ejecucion.log
 ```
-Si deseas copiar el archivo `.hex`:
-```powershell
-docker cp hadoop:/tmp/equipo5/ejecuciones/<ID_EJECUCION>/bbp/pi_1_16.hex .\resultados\pi_1_16.hex
-```
-No subas carpetas masivas, archivos `.tar.gz` de Hadoop ni archivos mayores a 50 MB.
 
-## 7. GitHub
-**[EN TU COMPUTADORA — PowerShell]** dentro de la carpeta:
-```powershell
-git init
-git add .
-git commit -m "Entrega equipo 5: BBP y DistBBP"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/bda-equipo-5-bbp.git
-git push -u origin main
-```
-Crea primero el repositorio público vacío en GitHub; sustituye `TU_USUARIO`. No se ha publicado automáticamente.
+El segundo archivo queda ignorado por `.gitignore`; para publicarlo como evidencia, cambiar su extensión a `.txt` después de revisar su contenido. No reemplazar evidencias originales sin compararlas.
 
-## 8. Reproducibilidad
-Un compañero debe poder: clonar, verificar su contenedor, copiar `scripts/ejecutar.sh`, ejecutarlo y comparar los resultados con `resultados/`. Si falla, abrir un Issue con comando, salida completa, versión de Hadoop y sistema utilizado.
+## 9. Actividad de comprobación
 
-## 9. Presentación y ejercicio
-Consultar `ejercicio/ejercicio.md` y `ejercicio/solucion.md`. La presentación se elaborará después de validar la reproducción.
+El archivo [ejercicio/ejercicio.md](ejercicio/ejercicio.md) propone ejecutar BBP con una y dos tareas Map y comparar las salidas. La explicación y los comandos están en [ejercicio/solucion.md](ejercicio/solucion.md).
 
-## 10. Evidencias originales de la sesión
-En el equipo que realizó la práctica, conservar `resultados/bbp`, `resultados/distbbp` y `resultados/distbbp-remoto` obtenidos con `docker cp`. La carpeta `distbbp-remoto` contiene artefactos de trabajo; para GitHub conviene conservar solo archivos de texto pequeños relevantes, sin archivos `.crc` ni directorios temporales innecesarios. No afirmar que el cálculo global de DistBBP finalizó hasta revisar el log completo.
+## 10. Alcance y limitaciones
+
+- Se conserva un resultado verificable de BBP.
+- Existen archivos parciales de DistBBP; falta adjuntar un registro completo que confirme su terminación global.
+- La reproducibilidad presupone un contenedor con Hadoop y Java previamente instalados.
+- El repositorio no incluye una demostración de ejecución distribuida entre varios nodos.
+
+Estas limitaciones permiten distinguir lo observado de lo que todavía debe comprobarse.
