@@ -1,1 +1,0 @@
-DistSum P20_5.job006> sigma=[n:value=5,delta=20,limit=85; e:value=96,delta=-20,limit=0]value=4600085434120256226, duration=0(0ms)
