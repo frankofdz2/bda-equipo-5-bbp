@@ -1,0 +1,1 @@
+DistSum P8_3.job001> sigma=[n:value=3,delta=8,limit=35; e:value=94,delta=-20,limit=0]value=4596880176699592102, duration=0(0ms)

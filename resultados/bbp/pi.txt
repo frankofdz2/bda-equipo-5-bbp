@@ -1,0 +1,6 @@
+
+Pi = 0x3.243F6A8885 A308D3
+Total number of hexadecimal digits is 16.
+
+Pi = 3.1415926535 897932
+Total number of decimal digits is 16.

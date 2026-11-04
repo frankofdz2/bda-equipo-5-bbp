@@ -1,0 +1,5 @@
+*.tar.gz
+*.log
+*.crc
+.DS_Store
+__pycache__/
